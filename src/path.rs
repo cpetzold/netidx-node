@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[napi]
 mod path {
   use netidx::path::Path;

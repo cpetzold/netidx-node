@@ -246,6 +246,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { path } = nativeBinding
+const { Publisher, path } = nativeBinding
 
+module.exports.Publisher = Publisher
 module.exports.path = path
