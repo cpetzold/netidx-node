@@ -1,7 +1,7 @@
 use napi::bindgen_prelude::*;
 use netidx::protocol::value::Value;
 
-#[napi]
+#[napi(js_name = "ValueType")]
 pub enum JsValueType {
     Null,
     Boolean,
@@ -15,7 +15,7 @@ pub enum JsValueType {
     Array,
 }
 
-#[napi]
+#[napi(js_name = "Value")]
 pub struct JsValue(Value);
 
 impl From<Value> for JsValue {
