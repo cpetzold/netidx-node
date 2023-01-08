@@ -246,7 +246,9 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { Publisher, path } = nativeBinding
+const { ValueType, Value, Publisher, path } = nativeBinding
 
+module.exports.ValueType = ValueType
+module.exports.Value = Value
 module.exports.Publisher = Publisher
 module.exports.path = path
