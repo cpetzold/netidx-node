@@ -10,6 +10,7 @@ use netidx::{
 extern crate napi_derive;
 
 mod path;
+mod value;
 
 #[napi(js_name = "Publisher")]
 struct JsPublisher {
