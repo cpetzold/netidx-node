@@ -1,4 +1,4 @@
-use napi::{bindgen_prelude::*, JsUnknown};
+use napi::bindgen_prelude::*;
 use netidx::protocol::value::Value as NValue;
 
 #[napi]
@@ -46,29 +46,6 @@ impl Value {
             NValue::Array(_) => ValueType::Array,
             NValue::True | NValue::False => ValueType::Boolean,
             NValue::Null => ValueType::Null,
-        }
-    }
-
-    // CR estokes: build a javascript object from the value
-    #[napi]
-    pub fn get(&self, env: Env) -> Result<JsUnknown> {
-        match &self.0 {
-            NValue::U32(u) | NValue::V32(u) => Ok(env.create_uint32(*u)?.into_unknown()),
-            NValue::I32(i) | NValue::Z32(i) => Ok(env.create_int32(*i)?.into_unknown()),
-            NValue::U64(u) | NValue::V64(u) => {
-                Ok(env.create_int64(*u as i64)?.into_unknown())
-            }
-            NValue::I64(i) | NValue::Z64(i) => Ok(env.create_int64(*i)?.into_unknown()),
-            NValue::F32(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
-            NValue::F64(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
-            NValue::String(s) => Ok(env.create_string(s)?.into_unknown()),
-            NValue::Bytes(b) => {
-                // CR estokes: avoid the copy by wrapping the Bytes type?
-                let mut buf = env.create_buffer(b.len())?;
-                buf.copy_from_slice(&*b);
-                Ok(buf.into_unknown())
-            }
-            _ => Ok(env.create_int32(42)?.into_unknown()),
         }
     }
 
