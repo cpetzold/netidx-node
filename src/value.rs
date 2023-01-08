@@ -1,8 +1,8 @@
 use napi::{bindgen_prelude::*, JsUnknown};
-use netidx::protocol::value::Value;
+use netidx::protocol::value::Value as NValue;
 
-#[napi(js_name = "ValueType")]
-pub enum JsValueType {
+#[napi]
+pub enum ValueType {
     Null,
     Boolean,
     Integer,
@@ -15,37 +15,37 @@ pub enum JsValueType {
     Array,
 }
 
-#[napi(js_name = "Value")]
-pub struct JsValue(Value);
+#[napi]
+pub struct Value(NValue);
 
-impl From<Value> for JsValue {
-    fn from(value: Value) -> Self {
-        JsValue(value)
+impl From<NValue> for Value {
+    fn from(value: NValue) -> Self {
+        Value(value)
     }
 }
 
 #[napi]
-impl JsValue {
+impl Value {
     #[napi(js_name = "type")]
-    pub fn kind(&self) -> JsValueType {
+    pub fn kind(&self) -> ValueType {
         match &self.0 {
-            Value::U32(_)
-            | Value::V32(_)
-            | Value::I32(_)
-            | Value::Z32(_)
-            | Value::U64(_)
-            | Value::V64(_)
-            | Value::I64(_)
-            | Value::Z64(_) => JsValueType::Integer,
-            Value::F32(_) | Value::F64(_) => JsValueType::Float,
-            Value::DateTime(_) => JsValueType::DateTime,
-            Value::Duration(_) => JsValueType::Duration,
-            Value::String(_) => JsValueType::String,
-            Value::Bytes(_) => JsValueType::Buffer,
-            Value::Ok | Value::Error(_) => JsValueType::Result,
-            Value::Array(_) => JsValueType::Array,
-            Value::True | Value::False => JsValueType::Boolean,
-            Value::Null => JsValueType::Null,
+            NValue::U32(_)
+            | NValue::V32(_)
+            | NValue::I32(_)
+            | NValue::Z32(_)
+            | NValue::U64(_)
+            | NValue::V64(_)
+            | NValue::I64(_)
+            | NValue::Z64(_) => ValueType::Integer,
+            NValue::F32(_) | NValue::F64(_) => ValueType::Float,
+            NValue::DateTime(_) => ValueType::DateTime,
+            NValue::Duration(_) => ValueType::Duration,
+            NValue::String(_) => ValueType::String,
+            NValue::Bytes(_) => ValueType::Buffer,
+            NValue::Ok | NValue::Error(_) => ValueType::Result,
+            NValue::Array(_) => ValueType::Array,
+            NValue::True | NValue::False => ValueType::Boolean,
+            NValue::Null => ValueType::Null,
         }
     }
 
@@ -53,15 +53,22 @@ impl JsValue {
     #[napi]
     pub fn get(&self, env: Env) -> Result<JsUnknown> {
         match &self.0 {
-            Value::U32(u) | Value::V32(u) => Ok(env.create_uint32(*u)?.into_unknown()),
-            Value::I32(i) | Value::Z32(i) => Ok(env.create_int32(*i)?.into_unknown()),
-            Value::U64(u) | Value::V64(u) => {
+            NValue::U32(u) | NValue::V32(u) => Ok(env.create_uint32(*u)?.into_unknown()),
+            NValue::I32(i) | NValue::Z32(i) => Ok(env.create_int32(*i)?.into_unknown()),
+            NValue::U64(u) | NValue::V64(u) => {
                 Ok(env.create_int64(*u as i64)?.into_unknown())
             }
-            Value::I64(i) | Value::Z64(i) => Ok(env.create_int64(*i)?.into_unknown()),
-            Value::F32(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
-            Value::F64(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
-            Value::String(s) => Ok(env.create_string(s)?.into_unknown()),
+            NValue::I64(i) | NValue::Z64(i) => Ok(env.create_int64(*i)?.into_unknown()),
+            NValue::F32(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
+            NValue::F64(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
+            NValue::String(s) => Ok(env.create_string(s)?.into_unknown()),
+            NValue::Bytes(b) => {
+                // CR estokes: avoid the copy by wrapping the Bytes type?
+                let mut buf = env.create_buffer(b.len())?;
+                buf.copy_from_slice(&*b);
+                Ok(buf.into_unknown())
+            }
+            _ => Ok(env.create_int32(42)?.into_unknown()),
         }
     }
 
