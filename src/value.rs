@@ -1,4 +1,4 @@
-use napi::bindgen_prelude::*;
+use napi::{bindgen_prelude::*, JsUnknown};
 use netidx::protocol::value::Value;
 
 #[napi]
@@ -46,6 +46,22 @@ impl JsValue {
             Value::Array(_) => JsValueType::Array,
             Value::True | Value::False => JsValueType::Boolean,
             Value::Null => JsValueType::Null,
+        }
+    }
+
+    // CR estokes: build a javascript object from the value
+    #[napi]
+    pub fn get(&self, env: Env) -> Result<JsUnknown> {
+        match &self.0 {
+            Value::U32(u) | Value::V32(u) => Ok(env.create_uint32(*u)?.into_unknown()),
+            Value::I32(i) | Value::Z32(i) => Ok(env.create_int32(*i)?.into_unknown()),
+            Value::U64(u) | Value::V64(u) => {
+                Ok(env.create_int64(*u as i64)?.into_unknown())
+            }
+            Value::I64(i) | Value::Z64(i) => Ok(env.create_int64(*i)?.into_unknown()),
+            Value::F32(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
+            Value::F64(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
+            Value::String(s) => Ok(env.create_string(s)?.into_unknown()),
         }
     }
 
