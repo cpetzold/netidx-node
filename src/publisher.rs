@@ -149,7 +149,7 @@ impl Into<Value> for Duration {
     }
 }
 
-type ValueFromJsInner<'a> = Either16<
+type JsValue<'a> = Either16<
     Null,
     bool,
     String,
@@ -168,55 +168,24 @@ type ValueFromJsInner<'a> = Either16<
     Buffer,
 >;
 
-struct ValueFromJs<'a>(ValueFromJsInner<'a>);
-
-impl Into<Value> for ValueFromJs<'_> {
-    fn into(self) -> Value {
-        match self.0 {
-            Either16::A(_) => Value::Null,
-            Either16::B(v) => v.into(),
-            Either16::C(v) => v.into(),
-            Either16::D(v) => v.into(),
-            Either16::E(v) => v.into(),
-            Either16::F(v) => v.into(),
-            Either16::G(v) => v.into(),
-            Either16::H(v) => Value::U64(v.inner.get_u64().1),
-            Either16::I(v) => Value::V64(v.inner.get_u64().1),
-            Either16::J(v) => v.into(),
-            Either16::K(v) => v.into(),
-            Either16::L(v) => v.into(),
-            Either16::M(v) => v.into(),
-            Either16::N(v) => v.into(),
-            Either16::O(_v) => todo!(),
-            Either16::P(_v) => todo!(),
-        }
-    }
-}
-
-impl From<Value> for ValueFromJs<'a> {
-    fn from(value: Value) -> Self {
-        Self(match value {
-            Value::U32(v) => ValueFromJsInner::D(&'a U32 { inner: v }),
-            Value::V32(_) => todo!(),
-            Value::I32(_) => todo!(),
-            Value::Z32(_) => todo!(),
-            Value::U64(_) => todo!(),
-            Value::V64(_) => todo!(),
-            Value::I64(_) => todo!(),
-            Value::Z64(_) => todo!(),
-            Value::F32(_) => todo!(),
-            Value::F64(_) => todo!(),
-            Value::DateTime(_) => todo!(),
-            Value::Duration(_) => todo!(),
-            Value::String(_) => todo!(),
-            Value::Bytes(_) => todo!(),
-            Value::True => todo!(),
-            Value::False => todo!(),
-            Value::Null => todo!(),
-            Value::Ok => todo!(),
-            Value::Error(_) => todo!(),
-            Value::Array(_) => todo!(),
-        })
+fn to_value(v: JsValue) -> Value {
+    match v {
+        Either16::A(_) => Value::Null,
+        Either16::B(v) => v.into(),
+        Either16::C(v) => v.into(),
+        Either16::D(v) => v.into(),
+        Either16::E(v) => v.into(),
+        Either16::F(v) => v.into(),
+        Either16::G(v) => v.into(),
+        Either16::H(v) => Value::U64(v.inner.get_u64().1),
+        Either16::I(v) => Value::V64(v.inner.get_u64().1),
+        Either16::J(v) => v.into(),
+        Either16::K(v) => v.into(),
+        Either16::L(v) => v.into(),
+        Either16::M(v) => v.into(),
+        Either16::N(v) => v.into(),
+        Either16::O(_v) => todo!(),
+        Either16::P(_v) => todo!(),
     }
 }
 
@@ -229,31 +198,9 @@ pub struct Publisher(NPublisher);
 #[napi]
 impl Publisher {
     #[napi]
-    pub fn publish(
-        &self,
-        path: String,
-        value: Either16<
-            Null,
-            bool,
-            String,
-            &U32,
-            &V32,
-            &I32,
-            &Z32,
-            &U64,
-            &V64,
-            &I64,
-            &Z64,
-            &F32,
-            &F64,
-            &Duration,
-            JsDate,
-            Buffer,
-        >,
-    ) -> Result<Val> {
-        let init: Value = ValueFromJs(value).into();
+    pub fn publish(&self, path: String, value: JsValue) -> Result<Val> {
         self.0
-            .publish(Path::from(path), init)
+            .publish(Path::from(path), to_value(value))
             .map_err(|_| Error::from_status(Status::GenericFailure))
             .map(|v| Val(v))
     }
