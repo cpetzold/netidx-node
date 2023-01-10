@@ -149,26 +149,26 @@ impl Into<Value> for Duration {
     }
 }
 
-type JsValue<'a> = Either16<
-    Null,
-    bool,
-    String,
-    &'a U32,
-    &'a V32,
-    &'a I32,
-    &'a Z32,
-    &'a U64,
-    &'a V64,
-    &'a I64,
-    &'a Z64,
-    &'a F32,
-    &'a F64,
-    &'a Duration,
-    JsDate,
-    Buffer,
->;
-
-fn to_value(v: JsValue) -> Value {
+fn to_value(
+    v: Either16<
+        Null,
+        bool,
+        String,
+        &U32,
+        &V32,
+        &I32,
+        &Z32,
+        &U64,
+        &V64,
+        &I64,
+        &Z64,
+        &F32,
+        &F64,
+        &Duration,
+        JsDate,
+        Buffer,
+    >,
+) -> Value {
     match v {
         Either16::A(_) => Value::Null,
         Either16::B(v) => v.into(),
@@ -198,7 +198,28 @@ pub struct Publisher(NPublisher);
 #[napi]
 impl Publisher {
     #[napi]
-    pub fn publish(&self, path: String, value: JsValue) -> Result<Val> {
+    pub fn publish(
+        &self,
+        path: String,
+        value: Either16<
+            Null,
+            bool,
+            String,
+            &U32,
+            &V32,
+            &I32,
+            &Z32,
+            &U64,
+            &V64,
+            &I64,
+            &Z64,
+            &F32,
+            &F64,
+            &Duration,
+            JsDate,
+            Buffer,
+        >,
+    ) -> Result<Val> {
         self.0
             .publish(Path::from(path), to_value(value))
             .map_err(|_| Error::from_status(Status::GenericFailure))
