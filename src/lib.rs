@@ -5,5 +5,5 @@ extern crate napi_derive;
 
 mod path;
 mod publisher;
-mod util;
+mod subscriber;
 mod value;
