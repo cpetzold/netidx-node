@@ -6,6 +6,7 @@ use napi::{
     threadsafe_function::{
         ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode,
     },
+    JsUnknown,
 };
 use netidx::{
     config::Config,
@@ -58,10 +59,14 @@ impl Drop for DVal {
 
 #[napi]
 impl DVal {
-    #[napi(
-        ts_args_type = "callback: (value: null | boolean | string | number | Buffer | Array<any>) => void"
-    )]
-    pub fn on_update(&mut self, callback: JsFunction) {
+    #[napi]
+    pub fn on_update(
+        &mut self,
+        #[napi(
+            ts_arg_type = "(value: null | boolean | string | number | Buffer | Array<any>) => void"
+        )]
+        callback: JsFunction,
+    ) {
         let tsfn: NCb = callback
             .create_threadsafe_function(0, |mut ctx| {
                 Ok(vec![js_of_value(&mut ctx.env, &ctx.value)?])
@@ -72,6 +77,14 @@ impl DVal {
         let _: std::result::Result<_, _> =
             self.subscriber.to_be.unbounded_send(DvToBe::RegisterCb(id, cbid, tsfn));
         self.callbacks.insert(cbid);
+    }
+
+    #[napi(ts_return_type = "null | boolean | string | number | Buffer | Array<any>")]
+    pub fn last(&self, mut env: Env) -> Result<JsUnknown> {
+        match self.val.last() {
+            Event::Unsubscribed => Ok(env.get_null()?.into_unknown()),
+            Event::Update(v) => Ok(js_of_value(&mut env, &v)?),
+        }
     }
 }
 
