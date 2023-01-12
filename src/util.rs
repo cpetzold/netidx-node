@@ -11,7 +11,6 @@ pub(crate) fn js_of_value(env: &mut Env, v: &Value) -> Result<JsUnknown> {
         Value::F64(f) => Ok(env.create_double(*f as f64)?.into_unknown()),
         Value::String(s) => Ok(env.create_string(s)?.into_unknown()),
         Value::Bytes(b) => {
-            // CR estokes: avoid the copy by wrapping the Bytes type?
             let mut buf = env.create_buffer(b.len())?;
             buf.copy_from_slice(&*b);
             Ok(buf.into_unknown())
@@ -20,10 +19,8 @@ pub(crate) fn js_of_value(env: &mut Env, v: &Value) -> Result<JsUnknown> {
         Value::False => Ok(env.get_boolean(false)?.into_unknown()),
         Value::Ok => Ok(env.create_symbol(Some("Ok"))?.into_unknown()),
         Value::Error(e) => {
-            let mut o = env.create_object()?;
-            let e = env.create_string(&*e);
-            o.set("error", e)?;
-            Ok(o.into_unknown())
+            // CR estokes: do something better than this
+            Ok(env.create_string(&*e)?.into_unknown())
         }
         Value::Array(a) => {
             let mut jsa = env.create_array(a.len() as u32)?;
@@ -33,9 +30,15 @@ pub(crate) fn js_of_value(env: &mut Env, v: &Value) -> Result<JsUnknown> {
             Ok(jsa.coerce_to_object()?.into_unknown())
         }
         Value::Null => Ok(env.get_null()?.into_unknown()),
-        Value::Duration(_) | Value::DateTime(_) => Err(Error::new(
-            Status::InvalidArg,
-            "unimplemented value conversion".to_owned(),
-        )),
+        Value::Duration(d) => {
+            // CR estokes: do something better
+            let s = format!("{}s", d.as_secs_f64());
+            Ok(env.create_string(&s)?.into_unknown())
+        }
+        Value::DateTime(d) => {
+            // CR estokes: do something better
+            let s = d.to_rfc3339();
+            Ok(env.create_string(&s)?.into_unknown())
+        },
     }
 }
