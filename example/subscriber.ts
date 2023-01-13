@@ -1,11 +1,13 @@
 import { createSubscriber } from "..";
 
 async function run() {
-  const subscriber = (await createSubscriber())!;
+  const subscriber = createSubscriber((batch) => console.log("!", batch));
 
-  const temp = subscriber.subscribe("/hello/world");
+  subscriber.subscribe("/hello/world");
 
-  temp.onUpdate((value) => console.log("!!", value));
+  while (true) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 run();
