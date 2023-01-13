@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::util::js_of_value;
 use futures::{channel::mpsc, prelude::*, select};
 use fxhash::FxHashMap;
@@ -11,6 +13,7 @@ use napi::{
 };
 use netidx::{
     config::Config,
+    path::Path,
     pool::Pooled,
     subscriber::{
         DesiredAuth, Dval, Event as NEvent, SubId, Subscriber as NSubscriber,
@@ -26,21 +29,28 @@ type NCb = ThreadsafeFunction<BatchedUpdate, ErrorStrategy::Fatal>;
 pub struct Subscriber {
     subscriber: NSubscriber,
     updates: mpsc::Sender<BatchedUpdate>,
-    dvals: FxHashMap<String, Dval>,
+    dvals: Arc<FxHashMap<SubId, (Path, Dval)>>,
+    path_to_subid: FxHashMap<Path, SubId>,
 }
 
 #[napi]
 impl Subscriber {
     #[napi]
     pub fn subscribe(&mut self, path: String) {
-        let val = self.subscriber.durable_subscribe(path.clone().into());
+        let p: Path = Path::from(path.clone());
+        let val = self.subscriber.durable_subscribe(p.clone());
         val.updates(UpdatesFlags::empty(), self.updates.clone());
-        self.dvals.insert(path, val);
+        Arc::make_mut(&mut self.dvals).insert(val.id(), (p.clone(), val.clone()));
+        self.path_to_subid.insert(p, val.id());
     }
 
     #[napi]
     pub fn unsubscribe(&mut self, path: String) {
-        self.dvals.remove(&path);
+        let p: Path = Path::from(path.clone());
+        if let Some(id) = self.path_to_subid.get(&p) {
+            Arc::make_mut(&mut self.dvals).remove(id);
+            self.path_to_subid.remove(&p);
+        }
     }
 }
 
@@ -63,25 +73,29 @@ pub enum EventType {
 
 #[napi(object)]
 pub struct Event {
-    // pub id: JsNumber,
-    pub kind: EventType,
+    pub path: Option<String>,
     pub value: Option<JsUnknown>,
+    pub kind: EventType,
 }
 
 #[napi]
 pub fn create_subscriber(callback: JsFunction) -> Result<Subscriber> {
+    let dvals: Arc<FxHashMap<SubId, (Path, Dval)>> = Arc::new(FxHashMap::default());
+    let idvals = dvals.clone();
     let tsfn: NCb = callback.create_threadsafe_function(
         0,
-        |mut ctx: ThreadSafeCallContext<BatchedUpdate>| {
+        move |mut ctx: ThreadSafeCallContext<BatchedUpdate>| {
             Ok(vec![ctx
                 .value
                 .drain(..)
-                .map(|(_id, event)| {
+                .map(|(id, event)| {
+                    let path = idvals.get(&id).map(|(path, _)| path.clone().to_string());
                     Ok(match event {
                         NEvent::Unsubscribed => {
-                            Event { kind: EventType::Unsubscribed, value: None }
+                            Event { path, kind: EventType::Unsubscribed, value: None }
                         }
                         NEvent::Update(v) => Event {
+                            path,
                             kind: EventType::Update,
                             value: Some(js_of_value(&mut ctx.env, &v.clone())?),
                         },
@@ -98,6 +112,7 @@ pub fn create_subscriber(callback: JsFunction) -> Result<Subscriber> {
         subscriber: NSubscriber::new(cfg, DesiredAuth::Local)
             .map_err(|_| Error::from_reason("Couldn't create subscriber"))?,
         updates: updates_tx,
-        dvals: FxHashMap::default(),
+        dvals: dvals.clone(),
+        path_to_subid: FxHashMap::default(),
     })
 }
