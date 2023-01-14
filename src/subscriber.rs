@@ -21,6 +21,9 @@ use netidx::{
 use tokio::task;
 
 type BatchedUpdate = Pooled<Vec<(SubId, NEvent)>>;
+// CR estokes: Given that we've decided to wrap on the JS side,
+// we should probably not use ErrorStrategy::Fatal. Then if batch
+// translation fails we can handle it on the JS side.
 type NCb = ThreadsafeFunction<BatchedUpdate, ErrorStrategy::Fatal>;
 
 #[napi]
@@ -41,7 +44,8 @@ impl Subscriber {
 
         let id = val.id().inner();
         self.dvals.insert(id, val.clone());
-        // CR estokes: why call val.id().inner() again here?
+        // CR estokes: why call val.id().inner() again here? u64 is
+        // Copy, you can just return `id'
         val.id().inner()
     }
 
@@ -54,7 +58,7 @@ impl Subscriber {
 
 async fn subscriber_task(mut from_sub: mpsc::Receiver<BatchedUpdate>, callback: NCb) {
     // CR estokes: change this to while let Some(batch) = from_sub.next().await ...
-    // Otherwise the task will not shutdown when the subscriber is dropped.
+    // Otherwise the task will spin forever when the subscriber is dropped.
     loop {
         if let Some(batch) = from_sub.next().await {
             callback.call(batch, ThreadsafeFunctionCallMode::Blocking);
@@ -98,6 +102,9 @@ pub fn create_subscriber(callback: JsFunction) -> Result<Subscriber> {
                         },
                     })
                 })
+                // CR estokes: Don't you want
+                // .collect::<Result<Vec<Event>>? That way JS doesn't
+                // have to deal with a Result<Event> for every update?
                 .collect::<Vec<Result<Event>>>()])
         },
     )?;
