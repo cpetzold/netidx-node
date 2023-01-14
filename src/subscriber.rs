@@ -35,11 +35,13 @@ impl Subscriber {
     #[napi]
     pub fn subscribe(&mut self, path: String) -> u64 {
         let path = Path::from(path);
+        // CR estokes: why clone the path, you never use it again?
         let val = self.subscriber.durable_subscribe(path.clone());
         val.updates(UpdatesFlags::empty(), self.updates.clone());
 
         let id = val.id().inner();
         self.dvals.insert(id, val.clone());
+        // CR estokes: why call val.id().inner() again here?
         val.id().inner()
     }
 
@@ -51,6 +53,8 @@ impl Subscriber {
 }
 
 async fn subscriber_task(mut from_sub: mpsc::Receiver<BatchedUpdate>, callback: NCb) {
+    // CR estokes: change this to while let Some(batch) = from_sub.next().await ...
+    // Otherwise the task will not shutdown when the subscriber is dropped.
     loop {
         if let Some(batch) = from_sub.next().await {
             callback.call(batch, ThreadsafeFunctionCallMode::Blocking);
@@ -97,6 +101,7 @@ pub fn create_subscriber(callback: JsFunction) -> Result<Subscriber> {
                 .collect::<Vec<Result<Event>>>()])
         },
     )?;
+    // CR estokes: This should be passed as an argument
     let cfg =
         Config::load_default().map_err(|_| Error::from_reason("Couldn't load config"))?;
     let (updates_tx, updates_rx) = mpsc::channel(3);
