@@ -47,24 +47,35 @@ class Subscriber extends EventEmitter {
   pathToId: Map<string, bigint>;
   inner: SubscriberInner;
 
-  constructor() {
+  constructor({ config, auth }: { config?: Object; auth?: Object } = {}) {
     super();
 
     this.idToPath = new Map();
     this.pathToId = new Map();
 
-    this.inner = createSubscriber((batch) => {
-      batch.forEach(({ id, type, value }) => {
-        const path = this.idToPath.get(id)!;
-        const event: SubscribeEvent = { type, value: value as Value, path };
-        if (path) {
-          this.emit(path, event);
-        }
-        this.emit("any", event);
-      });
-    });
+    this.inner = createSubscriber(
+      (batch) => {
+        if (!batch) return;
+        batch.forEach(({ id, type, value }) => {
+          const path = this.idToPath.get(id)!;
+          const event: SubscribeEvent = { type, value: value as Value, path };
+          if (path) {
+            this.emit(path, event);
+          }
+          this.emit("any", event);
+        });
+      }
+      // JSON.stringify(config),
+      // JSON.stringify(auth)
+    );
 
-    this.on("newListener", (path) => {
+    this.on("newListener", (event: string) => {
+      if (!event.startsWith("/")) {
+        return;
+      }
+      const path = event;
+      console.log("subscribing", { path });
+
       const id = this.inner.subscribe(path);
       this.idToPath.set(id, path);
       this.pathToId.set(path, id);

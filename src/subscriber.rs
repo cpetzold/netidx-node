@@ -21,10 +21,7 @@ use netidx::{
 use tokio::task;
 
 type BatchedUpdate = Pooled<Vec<(SubId, NEvent)>>;
-// CR estokes: Given that we've decided to wrap on the JS side,
-// we should probably not use ErrorStrategy::Fatal. Then if batch
-// translation fails we can handle it on the JS side.
-type NCb = ThreadsafeFunction<BatchedUpdate, ErrorStrategy::Fatal>;
+type NCb = ThreadsafeFunction<BatchedUpdate, ErrorStrategy::CalleeHandled>;
 
 #[napi]
 pub struct Subscriber {
@@ -38,15 +35,12 @@ impl Subscriber {
     #[napi]
     pub fn subscribe(&mut self, path: String) -> u64 {
         let path = Path::from(path);
-        // CR estokes: why clone the path, you never use it again?
-        let val = self.subscriber.durable_subscribe(path.clone());
+        let val = self.subscriber.durable_subscribe(path);
         val.updates(UpdatesFlags::empty(), self.updates.clone());
 
         let id = val.id().inner();
         self.dvals.insert(id, val.clone());
-        // CR estokes: why call val.id().inner() again here? u64 is
-        // Copy, you can just return `id'
-        val.id().inner()
+        id
     }
 
     #[napi]
@@ -57,12 +51,8 @@ impl Subscriber {
 }
 
 async fn subscriber_task(mut from_sub: mpsc::Receiver<BatchedUpdate>, callback: NCb) {
-    // CR estokes: change this to while let Some(batch) = from_sub.next().await ...
-    // Otherwise the task will spin forever when the subscriber is dropped.
-    loop {
-        if let Some(batch) = from_sub.next().await {
-            callback.call(batch, ThreadsafeFunctionCallMode::Blocking);
-        }
+    while let Some(batch) = from_sub.next().await {
+        callback.call(Ok(batch), ThreadsafeFunctionCallMode::Blocking);
     }
 }
 
@@ -80,41 +70,54 @@ pub struct Event {
     pub kind: EventType,
 }
 
-#[napi(ts_args_type = "callback: (batch: Event[]) => void")]
-pub fn create_subscriber(callback: JsFunction) -> Result<Subscriber> {
+#[napi(
+    ts_args_type = "callback: (batch: Event[]) => void, configJson?: string, authJson?: string"
+)]
+pub fn create_subscriber(
+    callback: JsFunction,
+    config_json: Option<String>,
+    auth_json: Option<String>,
+) -> Result<Subscriber> {
     let tsfn: NCb = callback.create_threadsafe_function(
         0,
         move |mut ctx: ThreadSafeCallContext<BatchedUpdate>| {
             Ok(vec![ctx
                 .value
                 .drain(..)
-                .map(|(id, event)| {
-                    Ok(match event {
-                        NEvent::Unsubscribed => Event {
-                            id: id.inner().into(),
-                            kind: EventType::Unsubscribed,
-                            value: None,
-                        },
-                        NEvent::Update(v) => Event {
-                            id: id.inner().into(),
-                            kind: EventType::Update,
-                            value: Some(js_of_value(&mut ctx.env, &v.clone())?),
-                        },
-                    })
+                .map(|(id, event)| match event {
+                    NEvent::Unsubscribed => Event {
+                        id: id.inner().into(),
+                        kind: EventType::Unsubscribed,
+                        value: None,
+                    },
+                    NEvent::Update(v) => Event {
+                        id: id.inner().into(),
+                        kind: EventType::Update,
+                        value: js_of_value(&mut ctx.env, &v.clone()).ok(),
+                    },
                 })
-                // CR estokes: Don't you want
-                // .collect::<Result<Vec<Event>>? That way JS doesn't
-                // have to deal with a Result<Event> for every update?
-                .collect::<Vec<Result<Event>>>()])
+                .collect::<Vec<Event>>()])
         },
     )?;
-    // CR estokes: This should be passed as an argument
-    let cfg =
-        Config::load_default().map_err(|_| Error::from_reason("Couldn't load config"))?;
+
+    let config = if let Some(config_json) = config_json {
+        Config::parse(&config_json)
+    } else {
+        Config::load_default()
+    }
+    .map_err(|_| Error::from_reason("Couldn't load config"))?;
+
+    let auth: DesiredAuth = if let Some(auth_json) = auth_json {
+        serde_json::from_str(auth_json.as_str())
+            .map_err(|_| Error::from_reason("Couldn't load desired auth"))?
+    } else {
+        config.default_auth()
+    };
+
     let (updates_tx, updates_rx) = mpsc::channel(3);
     task::spawn(subscriber_task(updates_rx, tsfn));
     Ok(Subscriber {
-        subscriber: NSubscriber::new(cfg, DesiredAuth::Local)
+        subscriber: NSubscriber::new(config, auth)
             .map_err(|_| Error::from_reason("Couldn't create subscriber"))?,
         updates: updates_tx,
         dvals: FxHashMap::default(),

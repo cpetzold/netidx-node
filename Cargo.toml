@@ -11,10 +11,11 @@ futures = "0.3.25"
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
 napi = { version = "2.10.4", default-features = false, features = ["napi4", "napi6", "tokio_rt"] }
 napi-derive = "2.9.3"
-netidx = { version = "0.15.0", default-features = false }
+netidx = { version = "0.15.1", default-features = false }
 parking_lot = "0.12"
 fxhash = "0.2"
 tokio = { version = "1", features = ["full"] }
+serde_json = "1.0.91"
 
 [build-dependencies]
 napi-build = "2.0.1"
